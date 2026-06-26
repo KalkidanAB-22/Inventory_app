@@ -1,11 +1,15 @@
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
 from sqlalchemy import select, insert, update, delete
-from database import engine, items
+from database import engine, items, users
 from fastapi.middleware.cors import CORSMiddleware
+from auth.router import router as auth_router
+from fastapi import Depends
+from auth.dependencies import get_current_user
 
 app = FastAPI()
 
+app.include_router(auth_router, prefix="/auth")
 
 # Model
 class Item(BaseModel):
@@ -20,9 +24,23 @@ def home():
 
 # CREATE
 @app.post("/items")
-def create_item(item: Item):
+def create_item(
+    item: Item,
+    current_user: str = Depends(get_current_user)
+):
 
-    query = insert(items).values(name=item.name)
+    with engine.connect() as conn:
+
+        user = conn.execute(
+            select(users).where(
+                users.c.email == current_user
+            )
+        ).fetchone()
+
+    query = insert(items).values(
+        name=item.name,
+        user_id=user._mapping["id"]
+    )
 
     with engine.begin() as conn:
         conn.execute(query)
@@ -32,14 +50,27 @@ def create_item(item: Item):
 
 # READ
 @app.get("/items")
-def get_items():
+def get_items(
+    current_user: str = Depends(get_current_user)
+):
 
     with engine.connect() as conn:
-        result = conn.execute(select(items))
+
+        user = conn.execute(
+            select(users).where(
+                users.c.email == current_user
+            )
+        ).fetchone()
+
+        result = conn.execute(
+            select(items).where(
+                items.c.user_id == user._mapping["id"]
+            )
+        )
+
         data = result.fetchall()
 
     return [dict(row._mapping) for row in data]
-
 
 # UPDATE
 @app.put("/items/{item_id}")
@@ -92,3 +123,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.get("/items/protected")
+def protected_route(current_user: str = Depends(get_current_user)):
+    return {
+        "message": "You are logged in!",
+        "user": current_user
+    }

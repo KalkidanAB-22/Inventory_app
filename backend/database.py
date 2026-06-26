@@ -9,12 +9,20 @@ engine = create_engine(
 )
 
 metadata = MetaData()
-
 items = Table(
     "items",
     metadata,
     Column("id", Integer, primary_key=True),
-    Column("name", String)
+    Column("name", String, nullable=False),
+    Column("user_id", Integer, nullable=False)
+)
+users = Table(
+    "users",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("username", String, nullable=False),
+    Column("email", String, unique=True, nullable=False),
+    Column("password", String, nullable=False)
 )
 
 metadata.create_all(engine)
